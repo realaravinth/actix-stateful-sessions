@@ -2,6 +2,10 @@
 name = "actix-stateful-session"
 version = "0.1.0"
 edition = "2018"
+authors = ["Aravinth Manivannan <realaravinth@batsense.net>"]
+license = "MIT or Apache-2.0"
+repository = "https://github.com/realaravinth/actix-stateful-sessions"
+description = "Stateful session for Actix Web"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
