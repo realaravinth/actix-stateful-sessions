@@ -13,10 +13,13 @@ use actix_web::http::{header::SET_COOKIE, HeaderValue};
 use actix_web::{Error, ResponseError};
 use derive_more::Display;
 use futures_util::future::{ok, FutureExt as _, LocalBoxFuture, Ready};
+use redis_glue::RedisConfig;
 use time::{Duration, OffsetDateTime};
 
 mod redis;
 mod session;
+
+use redis::{Client, SaveResult};
 
 pub use session::{Session, SessionStatus};
 
@@ -130,25 +133,34 @@ impl CookieConfig {
     }
 }
 
-#[derive(Default)]
-pub struct CookieSession(Rc<CookieConfig>);
+pub struct CookieSession {
+    cookie: Rc<CookieConfig>,
+    redis: Rc<Client>,
+}
 
 impl CookieSession {
+    pub async fn new(redis: RedisConfig) -> SaveResult<Self> {
+        let client = Client::new(redis).await?;
+        Ok(Self {
+            redis: Rc::new(client),
+            cookie: Rc::new(CookieConfig::default()),
+        })
+    }
     /// Sets the `path` field in the session cookie being built.
     pub fn path<S: Into<String>>(mut self, value: S) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().path = value.into();
+        Rc::get_mut(&mut self.cookie).unwrap().path = value.into();
         self
     }
 
     /// Sets the `name` field in the session cookie being built.
     pub fn name<S: Into<String>>(mut self, value: S) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().name = value.into();
+        Rc::get_mut(&mut self.cookie).unwrap().name = value.into();
         self
     }
 
     /// Sets the `domain` field in the session cookie being built.
     pub fn domain<S: Into<String>>(mut self, value: S) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().domain = Some(value.into());
+        Rc::get_mut(&mut self.cookie).unwrap().domain = Some(value.into());
         self
     }
 
@@ -157,19 +169,19 @@ impl CookieSession {
     /// If the `secure` field is set, a cookie will only be transmitted when the
     /// connection is secure - i.e. `https`
     pub fn secure(mut self, value: bool) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().secure = value;
+        Rc::get_mut(&mut self.cookie).unwrap().secure = value;
         self
     }
 
     /// Sets the `http_only` field in the session cookie being built.
     pub fn http_only(mut self, value: bool) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().http_only = value;
+        Rc::get_mut(&mut self.cookie).unwrap().http_only = value;
         self
     }
 
     /// Sets the `same_site` field in the session cookie being built.
     pub fn same_site(mut self, value: SameSite) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().same_site = Some(value);
+        Rc::get_mut(&mut self.cookie).unwrap().same_site = Some(value);
         self
     }
 
@@ -180,7 +192,7 @@ impl CookieSession {
 
     /// Sets the `max-age` field in the session cookie being built.
     pub fn max_age_time(mut self, value: time::Duration) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().max_age = Some(value);
+        Rc::get_mut(&mut self.cookie).unwrap().max_age = Some(value);
         self
     }
 
@@ -191,7 +203,7 @@ impl CookieSession {
 
     /// Sets the `expires` field in the session cookie being built.
     pub fn expires_in_time(mut self, value: Duration) -> CookieSession {
-        Rc::get_mut(&mut self.0).unwrap().expires_in = Some(value);
+        Rc::get_mut(&mut self.cookie).unwrap().expires_in = Some(value);
         self
     }
 }
@@ -213,7 +225,8 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ok(StatefulSessionMiddleware {
             service,
-            inner: self.0.clone(),
+            cookie: Rc::clone(&self.cookie),
+            redis: Rc::clone(&self.redis),
         })
     }
 }
@@ -221,7 +234,8 @@ where
 /// Cookie based session middleware.
 pub struct StatefulSessionMiddleware<S> {
     service: S,
-    inner: Rc<CookieConfig>,
+    cookie: Rc<CookieConfig>,
+    redis: Rc<Client>,
 }
 
 impl<S, B> Service<ServiceRequest> for StatefulSessionMiddleware<S>
@@ -244,9 +258,9 @@ where
     /// a user logs out, call session.purge() to set SessionStatus accordingly
     /// and this will trigger removal of the session cookie in the response.
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        let inner = self.inner.clone();
-        let (is_new, state) = self.inner.load(&req);
-        let prolong_expiration = self.inner.expires_in.is_some();
+        let cookie = self.cookie.clone();
+        let (is_new, state) = self.cookie.load(&req);
+        let prolong_expiration = self.cookie.expires_in.is_some();
         Session::set_session(&mut req, state);
 
         let fut = self.service.call(req);
@@ -256,25 +270,25 @@ where
 
             let result = match Session::get_changes(&mut res) {
                 (SessionStatus::Changed, id) | (SessionStatus::Renewed, id) => {
-                    inner.set_cookie(&mut res, id)
+                    cookie.set_cookie(&mut res, id)
                 }
 
                 (SessionStatus::Unchanged, id) if prolong_expiration => {
-                    inner.set_cookie(&mut res, id)
+                    cookie.set_cookie(&mut res, id)
                 }
 
                 // set a new session cookie upon first request (new client)
                 (SessionStatus::Unchanged, _) => {
                     if is_new {
                         let id = get_random(DEFAULT_SESSION_ID_LEN);
-                        inner.set_cookie(&mut res, id)
+                        cookie.set_cookie(&mut res, id)
                     } else {
                         Ok(())
                     }
                 }
 
                 (SessionStatus::Purged, _) => {
-                    let _ = inner.remove_cookie(&mut res);
+                    let _ = cookie.remove_cookie(&mut res);
                     Ok(())
                 }
             };
@@ -310,7 +324,12 @@ mod tests {
     async fn cookie_session() {
         let app = test::init_service(
             App::new()
-                .wrap(CookieSession::default().secure(false))
+                .wrap(
+                    CookieSession::new(RedisConfig::Single("redis://127.0.0.1".into()))
+                        .await
+                        .unwrap()
+                        .secure(false),
+                )
                 .service(web::resource("/").to(|ses: Session| async move {
                     let session = ses.get();
                     session
@@ -330,7 +349,12 @@ mod tests {
     async fn cookie_session_extractor() {
         let app = test::init_service(
             App::new()
-                .wrap(CookieSession::default().secure(false))
+                .wrap(
+                    CookieSession::new(RedisConfig::Single("redis://127.0.0.1".into()))
+                        .await
+                        .unwrap()
+                        .secure(false),
+                )
                 .service(web::resource("/").to(|ses: Session| async move {
                     let session = ses.get();
                     session
@@ -352,7 +376,7 @@ mod tests {
     //       let app = test::init_service(
     //           App::new()
     //               .wrap(
-    //                   CookieSession::default()
+    //                   CookieSession::new(RedisConfig::Single("redis://127.0.0.1".into())).await.unwrap()
     //                       .path("/test/")
     //                       .name("actix-test")
     //                       .domain("localhost")
@@ -392,7 +416,13 @@ mod tests {
     async fn prolong_expiration() {
         let app = test::init_service(
             App::new()
-                .wrap(CookieSession::default().secure(false).expires_in(60))
+                .wrap(
+                    CookieSession::new(RedisConfig::Single("redis://127.0.0.1".into()))
+                        .await
+                        .unwrap()
+                        .secure(false)
+                        .expires_in(60),
+                )
                 .service(web::resource("/").to(|ses: Session| async move {
                     let _ = ses.get();
                     "test"

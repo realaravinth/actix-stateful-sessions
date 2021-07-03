@@ -13,6 +13,8 @@ pub struct Client {
     redis: Redis,
 }
 
+const REDIS: &str = "redis://127.0.0.1";
+
 #[derive(Display, Error, Debug)]
 pub enum SaveError {
     #[display(fmt = "{}", _0)]
@@ -106,7 +108,6 @@ impl Client {
 mod tests {
     use super::*;
 
-    const REDIS: &str = "redis://127.0.0.1";
     const SSID: &str = "session_id";
 
     use redis_glue::redis::Value;
