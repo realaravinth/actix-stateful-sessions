@@ -15,6 +15,7 @@ use derive_more::Display;
 use futures_util::future::{ok, FutureExt as _, LocalBoxFuture, Ready};
 use time::{Duration, OffsetDateTime};
 
+mod redis;
 mod session;
 
 pub use session::{Session, SessionStatus};

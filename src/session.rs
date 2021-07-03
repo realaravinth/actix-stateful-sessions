@@ -5,6 +5,7 @@ use actix_web::{
     Error, FromRequest, HttpMessage, HttpRequest,
 };
 use futures_util::future::{ok, Ready};
+use serde::{de::DeserializeOwned, Serialize};
 
 /// Extraction of a [`Session`] object.
 pub trait UserSession {
@@ -74,20 +75,75 @@ impl Session {
     pub fn get(&self) -> String {
         self.0.borrow().id.clone()
     }
-    //
-    //    /// Inserts a key-value pair into the session.
-    //    ///
-    //    /// Any serializable value can be used and will be encoded as JSON in session data, hence why
-    //    /// only a reference to the value is taken.
-    //    pub(crate) fn set(&self, id: impl Into<String>) {
-    //        let mut inner = self.0.borrow_mut();
-    //
-    //        if inner.status != SessionStatus::Purged {
-    //            inner.status = SessionStatus::Changed;
-    //            inner.id = id.into();
-    //        }
-    //    }
-    //
+
+    /// Inserts a key-value pair into the session.
+    ///
+    /// Any serializable value can be used and will be encoded as JSON in session data, hence why
+    /// only a reference to the value is taken.
+    pub fn set(&self, id: impl Into<String>) {
+        let mut inner = self.0.borrow_mut();
+
+        if inner.status != SessionStatus::Purged {
+            inner.status = SessionStatus::Changed;
+            inner.id = id.into();
+        }
+    }
+
+    /// Inserts a key-value pair into the session.
+    ///
+    /// Any serializable value can be used and will be encoded as JSON in session data, hence why
+    /// only a reference to the value is taken.
+    pub fn insert(&self, key: impl Into<String>, value: impl Serialize) -> Result<(), Error> {
+        let mut inner = self.0.borrow_mut();
+
+        if inner.status != SessionStatus::Purged {
+            inner.status = SessionStatus::Changed;
+            let val = serde_json::to_string(&value)?;
+            todo!();
+        }
+
+        Ok(())
+    }
+
+    pub fn entries(&self) -> () {
+        todo!()
+    }
+
+    /// Remove value from the session.
+    ///
+    /// If present, the JSON encoded value is returned.
+    pub fn remove(&self, key: &str) -> Option<String> {
+        let mut inner = self.0.borrow_mut();
+
+        if inner.status != SessionStatus::Purged {
+            inner.status = SessionStatus::Changed;
+            todo!();
+        }
+        todo!();
+
+        None
+    }
+
+    /// Remove value from the session and deserialize.
+    ///
+    /// Returns None if key was not present in session. Returns T if deserialization succeeds,
+    /// otherwise returns un-deserialized JSON string.
+    pub fn remove_as<T: DeserializeOwned>(&self, key: &str) -> Option<Result<T, String>> {
+        todo!();
+        self.remove(key)
+            .map(|val_str| match serde_json::from_str(&val_str) {
+                Ok(val) => Ok(val),
+                Err(_err) => {
+                    log::debug!(
+                        "removed value (key: {}) could not be deserialized as {}",
+                        key,
+                        std::any::type_name::<T>()
+                    );
+                    Err(val_str)
+                }
+            })
+    }
+
     /// Clear the session.
     pub fn clear(&self) -> Option<String> {
         let mut inner = self.0.borrow_mut();
@@ -118,7 +174,7 @@ impl Session {
 
     fn get_session(extensions: &mut Extensions) -> Session {
         if let Some(s_impl) = extensions.get::<Rc<RefCell<SessionInner>>>() {
-            return Session(Rc::clone(&s_impl));
+            return Session(Rc::clone(s_impl));
         }
         let inner = Rc::new(RefCell::new(SessionInner::default()));
         extensions.insert(inner.clone());
