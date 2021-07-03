@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["actix_stateful_session"] = [{"text":"impl FromRequest for <a class=\"struct\" href=\"actix_stateful_session/struct.Session.html\" title=\"struct actix_stateful_session::Session\">Session</a>","synthetic":false,"types":["actix_stateful_session::session::Session"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

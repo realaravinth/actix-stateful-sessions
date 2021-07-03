@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["actix_stateful_session"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html\" title=\"trait core::cmp::PartialEq\">PartialEq</a>&lt;<a class=\"enum\" href=\"actix_stateful_session/enum.SessionStatus.html\" title=\"enum actix_stateful_session::SessionStatus\">SessionStatus</a>&gt; for <a class=\"enum\" href=\"actix_stateful_session/enum.SessionStatus.html\" title=\"enum actix_stateful_session::SessionStatus\">SessionStatus</a>","synthetic":false,"types":["actix_stateful_session::session::SessionStatus"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

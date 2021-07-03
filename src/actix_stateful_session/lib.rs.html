@@ -432,46 +432,6 @@
 <span id="429">429</span>
 <span id="430">430</span>
 <span id="431">431</span>
-<span id="432">432</span>
-<span id="433">433</span>
-<span id="434">434</span>
-<span id="435">435</span>
-<span id="436">436</span>
-<span id="437">437</span>
-<span id="438">438</span>
-<span id="439">439</span>
-<span id="440">440</span>
-<span id="441">441</span>
-<span id="442">442</span>
-<span id="443">443</span>
-<span id="444">444</span>
-<span id="445">445</span>
-<span id="446">446</span>
-<span id="447">447</span>
-<span id="448">448</span>
-<span id="449">449</span>
-<span id="450">450</span>
-<span id="451">451</span>
-<span id="452">452</span>
-<span id="453">453</span>
-<span id="454">454</span>
-<span id="455">455</span>
-<span id="456">456</span>
-<span id="457">457</span>
-<span id="458">458</span>
-<span id="459">459</span>
-<span id="460">460</span>
-<span id="461">461</span>
-<span id="462">462</span>
-<span id="463">463</span>
-<span id="464">464</span>
-<span id="465">465</span>
-<span id="466">466</span>
-<span id="467">467</span>
-<span id="468">468</span>
-<span id="469">469</span>
-<span id="470">470</span>
-<span id="471">471</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Cookie based sessions. See docs for [`CookieSession`].</span>
 
@@ -481,7 +441,6 @@
 <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">collections::HashMap</span>, <span class="ident">rc::Rc</span>};
 
 <span class="kw">use</span> <span class="ident">actix_service</span>::{<span class="ident">Service</span>, <span class="ident">Transform</span>};
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">actix_session</span>::{<span class="ident">Session</span>, <span class="ident">SessionStatus</span>};
 <span class="kw">use</span> <span class="ident">actix_web::body</span>::{<span class="ident">AnyBody</span>, <span class="ident">MessageBody</span>};
 <span class="kw">use</span> <span class="ident">actix_web::cookie</span>::{<span class="ident">Cookie</span>, <span class="ident">CookieJar</span>, <span class="ident">SameSite</span>};
 <span class="kw">use</span> <span class="ident">actix_web::dev</span>::{<span class="ident">ServiceRequest</span>, <span class="ident">ServiceResponse</span>};
@@ -489,10 +448,14 @@
 <span class="kw">use</span> <span class="ident">actix_web</span>::{<span class="ident">Error</span>, <span class="ident">ResponseError</span>};
 <span class="kw">use</span> <span class="ident">derive_more::Display</span>;
 <span class="kw">use</span> <span class="ident">futures_util::future</span>::{<span class="ident">ok</span>, <span class="ident">FutureExt</span> <span class="kw">as</span> <span class="kw">_</span>, <span class="ident">LocalBoxFuture</span>, <span class="ident">Ready</span>};
-<span class="kw">use</span> <span class="ident">serde_json::error::Error</span> <span class="kw">as</span> <span class="ident">JsonError</span>;
 <span class="kw">use</span> <span class="ident">time</span>::{<span class="ident">Duration</span>, <span class="ident">OffsetDateTime</span>};
 
-<span class="kw">const</span> <span class="ident">DEFAULT_COOKIE_NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;actix-stateful-session&quot;</span>;
+<span class="kw">mod</span> <span class="ident">session</span>;
+
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">session</span>::{<span class="ident">Session</span>, <span class="ident">SessionStatus</span>};
+
+<span class="kw">const</span> <span class="ident">DEFAULT_COOKIE_NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;actix-session-ID&quot;</span>;
+<span class="kw">const</span> <span class="ident">DEFAULT_SESSION_ID_LEN</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">32</span>;
 
 <span class="doccomment">/// Errors that can occur during handling cookie session</span>
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Display</span>)]</span>
@@ -500,10 +463,6 @@
     <span class="doccomment">/// Size of the serialized session is greater than 4000 bytes.</span>
     <span class="attribute">#[<span class="ident">display</span>(<span class="ident">fmt</span> <span class="op">=</span> <span class="string">&quot;Size of the serialized session is greater than 4000 bytes.&quot;</span>)]</span>
     <span class="ident">Overflow</span>,
-
-    <span class="doccomment">/// Fail to serialize session.</span>
-    <span class="attribute">#[<span class="ident">display</span>(<span class="ident">fmt</span> <span class="op">=</span> <span class="string">&quot;Fail to serialize session&quot;</span>)]</span>
-    <span class="ident">Serialize</span>(<span class="ident">JsonError</span>),
 }
 
 <span class="kw">impl</span> <span class="ident">ResponseError</span> <span class="kw">for</span> <span class="ident">CookieSessionError</span> {}
@@ -512,7 +471,6 @@
     <span class="ident">name</span>: <span class="ident">String</span>,
     <span class="ident">path</span>: <span class="ident">String</span>,
     <span class="ident">domain</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
-    <span class="ident">lazy</span>: <span class="ident">bool</span>,
     <span class="ident">secure</span>: <span class="ident">bool</span>,
     <span class="ident">http_only</span>: <span class="ident">bool</span>,
     <span class="ident">max_age</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Duration</span><span class="op">&gt;</span>,
@@ -526,7 +484,6 @@
             <span class="ident">name</span>: <span class="ident">DEFAULT_COOKIE_NAME</span>.<span class="ident">into</span>(),
             <span class="ident">path</span>: <span class="string">&quot;/&quot;</span>.<span class="ident">to_owned</span>(),
             <span class="ident">domain</span>: <span class="prelude-val">None</span>,
-            <span class="ident">lazy</span>: <span class="bool-val">false</span>,
             <span class="ident">secure</span>: <span class="bool-val">true</span>,
             <span class="ident">http_only</span>: <span class="bool-val">true</span>,
             <span class="ident">max_age</span>: <span class="prelude-val">None</span>,
@@ -537,19 +494,7 @@
 }
 
 <span class="kw">impl</span> <span class="ident">CookieConfig</span> {
-    <span class="kw">fn</span> <span class="ident">set_cookie</span><span class="op">&lt;</span><span class="ident">B</span><span class="op">&gt;</span>(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        <span class="ident">res</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">ServiceResponse</span><span class="op">&lt;</span><span class="ident">B</span><span class="op">&gt;</span>,
-        <span class="ident">state</span>: <span class="kw">impl</span> <span class="ident">Iterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> (<span class="ident">String</span>, <span class="ident">String</span>)<span class="op">&gt;</span>,
-    ) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">Error</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">state</span>: <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">state</span>.<span class="ident">collect</span>();
-
-        <span class="kw">if</span> <span class="self">self</span>.<span class="ident">lazy</span> <span class="op">&amp;&amp;</span> <span class="ident">state</span>.<span class="ident">is_empty</span>() {
-            <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
-        }
-
-        <span class="kw">let</span> <span class="ident">value</span> <span class="op">=</span> <span class="ident">serde_json::to_string</span>(<span class="kw-2">&amp;</span><span class="ident">state</span>).<span class="ident">map_err</span>(<span class="ident">CookieSessionError::Serialize</span>)<span class="question-mark">?</span>;
-
+    <span class="kw">fn</span> <span class="ident">set_cookie</span><span class="op">&lt;</span><span class="ident">B</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">res</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">ServiceResponse</span><span class="op">&lt;</span><span class="ident">B</span><span class="op">&gt;</span>, <span class="ident">value</span>: <span class="ident">String</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">Error</span><span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="ident">value</span>.<span class="ident">len</span>() <span class="op">&gt;</span> <span class="number">4064</span> {
             <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="ident">CookieSessionError::Overflow</span>.<span class="ident">into</span>());
         }
@@ -599,7 +544,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">load</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">req</span>: <span class="kw-2">&amp;</span><span class="ident">ServiceRequest</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="ident">bool</span>, <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span>) {
+    <span class="kw">fn</span> <span class="ident">load</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">req</span>: <span class="kw-2">&amp;</span><span class="ident">ServiceRequest</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="ident">bool</span>, <span class="ident">String</span>) {
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Ok</span>(<span class="ident">cookies</span>) <span class="op">=</span> <span class="ident">req</span>.<span class="ident">cookies</span>() {
             <span class="kw">for</span> <span class="ident">cookie</span> <span class="kw">in</span> <span class="ident">cookies</span>.<span class="ident">iter</span>() {
                 <span class="kw">if</span> <span class="ident">cookie</span>.<span class="ident">name</span>() <span class="op">=</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">name</span> {
@@ -609,15 +554,13 @@
                     <span class="kw">let</span> <span class="ident">cookie_opt</span> <span class="op">=</span> <span class="ident">jar</span>.<span class="ident">get</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">name</span>);
 
                     <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">cookie</span>) <span class="op">=</span> <span class="ident">cookie_opt</span> {
-                        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Ok</span>(<span class="ident">val</span>) <span class="op">=</span> <span class="ident">serde_json::from_str</span>(<span class="ident">cookie</span>.<span class="ident">value</span>()) {
-                            <span class="kw">return</span> (<span class="bool-val">false</span>, <span class="ident">val</span>);
-                        }
+                        <span class="kw">return</span> (<span class="bool-val">false</span>, <span class="ident">cookie</span>.<span class="ident">value</span>().<span class="ident">to_owned</span>());
                     }
                 }
             }
         }
 
-        (<span class="bool-val">true</span>, <span class="ident">HashMap::new</span>())
+        (<span class="bool-val">true</span>, <span class="ident">String::new</span>())
     }
 }
 
@@ -640,15 +583,6 @@
     <span class="doccomment">/// Sets the `domain` field in the session cookie being built.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">domain</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Into</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">value</span>: <span class="ident">S</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">CookieSession</span> {
         <span class="ident">Rc::get_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="number">0</span>).<span class="ident">unwrap</span>().<span class="ident">domain</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">value</span>.<span class="ident">into</span>());
-        <span class="self">self</span>
-    }
-
-    <span class="doccomment">/// When true, prevents adding session cookies to responses until</span>
-    <span class="doccomment">/// the session contains data. Default is `false`.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Useful when trying to comply with laws that require consent for setting cookies.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">lazy</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">CookieSession</span> {
-        <span class="ident">Rc::get_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="number">0</span>).<span class="ident">unwrap</span>().<span class="ident">lazy</span> <span class="op">=</span> <span class="ident">value</span>;
         <span class="self">self</span>
     }
 
@@ -755,19 +689,19 @@
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">fut</span>.<span class="kw">await</span><span class="question-mark">?</span>;
 
             <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">Session::get_changes</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>) {
-                (<span class="ident">SessionStatus::Changed</span>, <span class="ident">state</span>) <span class="op">|</span> (<span class="ident">SessionStatus::Renewed</span>, <span class="ident">state</span>) <span class="op">=</span><span class="op">&gt;</span> {
-                    <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">state</span>)
+                (<span class="ident">SessionStatus::Changed</span>, <span class="ident">id</span>) <span class="op">|</span> (<span class="ident">SessionStatus::Renewed</span>, <span class="ident">id</span>) <span class="op">=</span><span class="op">&gt;</span> {
+                    <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">id</span>)
                 }
 
-                (<span class="ident">SessionStatus::Unchanged</span>, <span class="ident">state</span>) <span class="kw">if</span> <span class="ident">prolong_expiration</span> <span class="op">=</span><span class="op">&gt;</span> {
-                    <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">state</span>)
+                (<span class="ident">SessionStatus::Unchanged</span>, <span class="ident">id</span>) <span class="kw">if</span> <span class="ident">prolong_expiration</span> <span class="op">=</span><span class="op">&gt;</span> {
+                    <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">id</span>)
                 }
 
                 <span class="comment">// set a new session cookie upon first request (new client)</span>
                 (<span class="ident">SessionStatus::Unchanged</span>, <span class="kw">_</span>) <span class="op">=</span><span class="op">&gt;</span> {
                     <span class="kw">if</span> <span class="ident">is_new</span> {
-                        <span class="kw">let</span> <span class="ident">state</span>: <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">HashMap::new</span>();
-                        <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">state</span>.<span class="ident">into_iter</span>())
+                        <span class="kw">let</span> <span class="ident">id</span> <span class="op">=</span> <span class="ident">get_random</span>(<span class="ident">DEFAULT_SESSION_ID_LEN</span>);
+                        <span class="ident">inner</span>.<span class="ident">set_cookie</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">res</span>, <span class="ident">id</span>)
                     } <span class="kw">else</span> {
                         <span class="prelude-val">Ok</span>(())
                     }
@@ -788,10 +722,22 @@
     }
 }
 
+<span class="kw">fn</span> <span class="ident">get_random</span>(<span class="ident">len</span>: <span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">String</span> {
+    <span class="kw">use</span> <span class="ident">rand</span>::{<span class="ident">distributions::Alphanumeric</span>, <span class="ident">rngs::ThreadRng</span>, <span class="ident">thread_rng</span>, <span class="ident">Rng</span>};
+    <span class="kw">use</span> <span class="ident">std::iter</span>;
+
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">rng</span>: <span class="ident">ThreadRng</span> <span class="op">=</span> <span class="ident">thread_rng</span>();
+
+    <span class="ident">iter::repeat</span>(())
+        .<span class="ident">map</span>(<span class="op">|</span>()<span class="op">|</span> <span class="ident">rng</span>.<span class="ident">sample</span>(<span class="ident">Alphanumeric</span>))
+        .<span class="ident">map</span>(<span class="ident">char::from</span>)
+        .<span class="ident">take</span>(<span class="ident">len</span>)
+        .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>()
+}
+
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">actix_web::web::Bytes</span>;
     <span class="kw">use</span> <span class="ident">actix_web</span>::{<span class="ident">test</span>, <span class="ident">web</span>, <span class="ident">App</span>};
 
     <span class="attribute">#[<span class="ident">actix_rt::test</span>]</span>
@@ -800,8 +746,8 @@
             <span class="ident">App::new</span>()
                 .<span class="ident">wrap</span>(<span class="ident">CookieSession::default</span>().<span class="ident">secure</span>(<span class="bool-val">false</span>))
                 .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">insert</span>(<span class="string">&quot;counter&quot;</span>, <span class="number">100</span>);
-                    <span class="string">&quot;test&quot;</span>
+                    <span class="kw">let</span> <span class="ident">session</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">get</span>();
+                    <span class="ident">session</span>
                 })),
         )
         .<span class="kw">await</span>;
@@ -815,39 +761,13 @@
     }
 
     <span class="attribute">#[<span class="ident">actix_rt::test</span>]</span>
-    <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">lazy_cookie</span>() {
-        <span class="kw">let</span> <span class="ident">app</span> <span class="op">=</span> <span class="ident">test::init_service</span>(
-            <span class="ident">App::new</span>()
-                .<span class="ident">wrap</span>(<span class="ident">CookieSession::default</span>().<span class="ident">secure</span>(<span class="bool-val">false</span>).<span class="ident">lazy</span>(<span class="bool-val">true</span>))
-                .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/count&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">insert</span>(<span class="string">&quot;counter&quot;</span>, <span class="number">100</span>);
-                    <span class="string">&quot;counting&quot;</span>
-                }))
-                .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">_ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> { <span class="string">&quot;test&quot;</span> })),
-        )
-        .<span class="kw">await</span>;
-
-        <span class="kw">let</span> <span class="ident">request</span> <span class="op">=</span> <span class="ident">test::TestRequest::get</span>().<span class="ident">to_request</span>();
-        <span class="kw">let</span> <span class="ident">response</span> <span class="op">=</span> <span class="ident">app</span>.<span class="ident">call</span>(<span class="ident">request</span>).<span class="kw">await</span>.<span class="ident">unwrap</span>();
-        <span class="macro">assert!</span>(<span class="ident">response</span>.<span class="ident">response</span>().<span class="ident">cookies</span>().<span class="ident">count</span>() <span class="op">=</span><span class="op">=</span> <span class="number">0</span>);
-
-        <span class="kw">let</span> <span class="ident">request</span> <span class="op">=</span> <span class="ident">test::TestRequest::with_uri</span>(<span class="string">&quot;/count&quot;</span>).<span class="ident">to_request</span>();
-        <span class="kw">let</span> <span class="ident">response</span> <span class="op">=</span> <span class="ident">app</span>.<span class="ident">call</span>(<span class="ident">request</span>).<span class="kw">await</span>.<span class="ident">unwrap</span>();
-
-        <span class="macro">assert!</span>(<span class="ident">response</span>
-            .<span class="ident">response</span>()
-            .<span class="ident">cookies</span>()
-            .<span class="ident">any</span>(<span class="op">|</span><span class="ident">c</span><span class="op">|</span> <span class="ident">c</span>.<span class="ident">name</span>() <span class="op">=</span><span class="op">=</span> <span class="ident">DEFAULT_COOKIE_NAME</span>))
-    }
-
-    <span class="attribute">#[<span class="ident">actix_rt::test</span>]</span>
     <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">cookie_session_extractor</span>() {
         <span class="kw">let</span> <span class="ident">app</span> <span class="op">=</span> <span class="ident">test::init_service</span>(
             <span class="ident">App::new</span>()
                 .<span class="ident">wrap</span>(<span class="ident">CookieSession::default</span>().<span class="ident">secure</span>(<span class="bool-val">false</span>))
                 .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">insert</span>(<span class="string">&quot;counter&quot;</span>, <span class="number">100</span>);
-                    <span class="string">&quot;test&quot;</span>
+                    <span class="kw">let</span> <span class="ident">session</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">get</span>();
+                    <span class="ident">session</span>
                 })),
         )
         .<span class="kw">await</span>;
@@ -861,46 +781,46 @@
             .<span class="ident">any</span>(<span class="op">|</span><span class="ident">c</span><span class="op">|</span> <span class="ident">c</span>.<span class="ident">name</span>() <span class="op">=</span><span class="op">=</span> <span class="ident">DEFAULT_COOKIE_NAME</span>));
     }
 
-    <span class="attribute">#[<span class="ident">actix_rt::test</span>]</span>
-    <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">basics</span>() {
-        <span class="kw">let</span> <span class="ident">app</span> <span class="op">=</span> <span class="ident">test::init_service</span>(
-            <span class="ident">App::new</span>()
-                .<span class="ident">wrap</span>(
-                    <span class="ident">CookieSession::default</span>()
-                        .<span class="ident">path</span>(<span class="string">&quot;/test/&quot;</span>)
-                        .<span class="ident">name</span>(<span class="string">&quot;actix-test&quot;</span>)
-                        .<span class="ident">domain</span>(<span class="string">&quot;localhost&quot;</span>)
-                        .<span class="ident">http_only</span>(<span class="bool-val">true</span>)
-                        .<span class="ident">same_site</span>(<span class="ident">SameSite::Lax</span>)
-                        .<span class="ident">max_age</span>(<span class="number">100</span>),
-                )
-                .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">insert</span>(<span class="string">&quot;counter&quot;</span>, <span class="number">100</span>);
-                    <span class="string">&quot;test&quot;</span>
-                }))
-                .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/test/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="ident">val</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">get</span>(<span class="string">&quot;counter&quot;</span>).<span class="ident">unwrap</span>().<span class="ident">unwrap</span>();
-                    <span class="macro">format!</span>(<span class="string">&quot;counter: {}&quot;</span>, <span class="ident">val</span>)
-                })),
-        )
-        .<span class="kw">await</span>;
+    <span class="comment">//   #[actix_rt::test]</span>
+    <span class="comment">//   async fn basics() {</span>
+    <span class="comment">//       let app = test::init_service(</span>
+    <span class="comment">//           App::new()</span>
+    <span class="comment">//               .wrap(</span>
+    <span class="comment">//                   CookieSession::default()</span>
+    <span class="comment">//                       .path(&quot;/test/&quot;)</span>
+    <span class="comment">//                       .name(&quot;actix-test&quot;)</span>
+    <span class="comment">//                       .domain(&quot;localhost&quot;)</span>
+    <span class="comment">//                       .http_only(true)</span>
+    <span class="comment">//                       .same_site(SameSite::Lax)</span>
+    <span class="comment">//                       .max_age(100),</span>
+    <span class="comment">//               )</span>
+    <span class="comment">//               .service(web::resource(&quot;/&quot;).to(|ses: Session| async move {</span>
+    <span class="comment">//                   let _ = ses.get();</span>
+    <span class="comment">//                   &quot;test&quot;</span>
+    <span class="comment">//               }))</span>
+    <span class="comment">//               .service(web::resource(&quot;/test/&quot;).to(|ses: Session| async move {</span>
+    <span class="comment">//                   let val = ses.get();</span>
+    <span class="comment">//                   format!(&quot;counter: {}&quot;, val)</span>
+    <span class="comment">//               })),</span>
+    <span class="comment">//       )</span>
+    <span class="comment">//       .await;</span>
 
-        <span class="kw">let</span> <span class="ident">request</span> <span class="op">=</span> <span class="ident">test::TestRequest::get</span>().<span class="ident">to_request</span>();
-        <span class="kw">let</span> <span class="ident">response</span> <span class="op">=</span> <span class="ident">app</span>.<span class="ident">call</span>(<span class="ident">request</span>).<span class="kw">await</span>.<span class="ident">unwrap</span>();
-        <span class="kw">let</span> <span class="ident">cookie</span> <span class="op">=</span> <span class="ident">response</span>
-            .<span class="ident">response</span>()
-            .<span class="ident">cookies</span>()
-            .<span class="ident">find</span>(<span class="op">|</span><span class="ident">c</span><span class="op">|</span> <span class="ident">c</span>.<span class="ident">name</span>() <span class="op">=</span><span class="op">=</span> <span class="string">&quot;actix-test&quot;</span>)
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">clone</span>();
-        <span class="macro">assert_eq!</span>(<span class="ident">cookie</span>.<span class="ident">path</span>().<span class="ident">unwrap</span>(), <span class="string">&quot;/test/&quot;</span>);
+    <span class="comment">//       let request = test::TestRequest::get().to_request();</span>
+    <span class="comment">//       let response = app.call(request).await.unwrap();</span>
+    <span class="comment">//       let cookie = response</span>
+    <span class="comment">//           .response()</span>
+    <span class="comment">//           .cookies()</span>
+    <span class="comment">//           .find(|c| c.name() == &quot;actix-test&quot;)</span>
+    <span class="comment">//           .unwrap()</span>
+    <span class="comment">//           .clone();</span>
+    <span class="comment">//       assert_eq!(cookie.path().unwrap(), &quot;/test/&quot;);</span>
 
-        <span class="kw">let</span> <span class="ident">request</span> <span class="op">=</span> <span class="ident">test::TestRequest::with_uri</span>(<span class="string">&quot;/test/&quot;</span>)
-            .<span class="ident">cookie</span>(<span class="ident">cookie</span>)
-            .<span class="ident">to_request</span>();
-        <span class="kw">let</span> <span class="ident">body</span> <span class="op">=</span> <span class="ident">test::read_response</span>(<span class="kw-2">&amp;</span><span class="ident">app</span>, <span class="ident">request</span>).<span class="kw">await</span>;
-        <span class="macro">assert_eq!</span>(<span class="ident">body</span>, <span class="ident">Bytes::from_static</span>(<span class="string">b&quot;counter: 100&quot;</span>));
-    }
+    <span class="comment">//       let request = test::TestRequest::with_uri(&quot;/test/&quot;)</span>
+    <span class="comment">//           .cookie(cookie)</span>
+    <span class="comment">//           .to_request();</span>
+    <span class="comment">//       let body = test::read_response(&amp;app, request).await;</span>
+    <span class="comment">//       assert_eq!(body, Bytes::from_static(b&quot;counter: 100&quot;));</span>
+    <span class="comment">//   }</span>
 
     <span class="attribute">#[<span class="ident">actix_rt::test</span>]</span>
     <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">prolong_expiration</span>() {
@@ -908,7 +828,7 @@
             <span class="ident">App::new</span>()
                 .<span class="ident">wrap</span>(<span class="ident">CookieSession::default</span>().<span class="ident">secure</span>(<span class="bool-val">false</span>).<span class="ident">expires_in</span>(<span class="number">60</span>))
                 .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="ident">ses</span>: <span class="ident">Session</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> {
-                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">insert</span>(<span class="string">&quot;counter&quot;</span>, <span class="number">100</span>);
+                    <span class="kw">let</span> <span class="kw">_</span> <span class="op">=</span> <span class="ident">ses</span>.<span class="ident">get</span>();
                     <span class="string">&quot;test&quot;</span>
                 }))
                 .<span class="ident">service</span>(<span class="ident">web::resource</span>(<span class="string">&quot;/test/&quot;</span>).<span class="ident">to</span>(<span class="op">|</span><span class="op">|</span> <span class="kw">async</span> <span class="kw">move</span> { <span class="string">&quot;no-changes-in-session&quot;</span> })),
