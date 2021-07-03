@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      mcaptcha-redis:
-        image: redis/redis
+      redis:
+        image: redis
         ports:
           - 6379:6379
 
